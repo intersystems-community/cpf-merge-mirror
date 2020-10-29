@@ -1,0 +1,75 @@
+version: '3.7'
+# This compose runs 3 services: 
+# - 2 x IRIS instances and 
+# - 1 x Arbiter
+#
+# Durable %SYS directories will be in 
+# ./iris.sys.d1
+# ./iris.sys.d2
+#
+# A network is defined with a range of ip addresses to 
+# a) pin services to an IP and 
+# b) to avoid conflict with local subnets
+#
+networks:
+  iris-net:
+    driver: bridge
+    driver_opts:
+      com.docker.network.enable_ipv4: "true"
+    ipam:
+      driver: default
+      config:
+        - subnet: 10.0.0.0/16
+
+services:
+  iris1:
+    # IRIS 2020.4 based container
+    image: intersystems/iris:2020.4.0ICM.163.0
+    command: ["-b touch /home/irisowner/irissys/iscagent_console.log && /home/irisowner/irissys/startISCAgent.sh 2188", "--key", "/ISC/iris.key"]
+    labels:
+      - "traefik.http.routers.iris1.rule=Host(`iris1.docker.localhost`)"
+    hostname: iris1
+    init: true
+    networks:
+      iris-net:
+        ipv4_address: 10.0.0.11
+    ports:
+      - "9011:1972"
+      - "9012:52773"
+    environment:
+      - ISC_DATA_DIRECTORY=/ISC/iris.sys.d1
+      - ISC_CPF_MERGE_FILE=/ISC/mirrorPrimary.conf
+    volumes:
+      - ./:/ISC
+
+  iris2:
+    image: intersystems/iris:2020.4.0ICM.163.0 
+    command: ["-b touch /home/irisowner/irissys/iscagent_console.log && /home/irisowner/irissys/startISCAgent.sh 2188", "--key", "/ISC/iris.key"]
+    labels:
+      - "traefik.http.routers.iris2.rule=Host(`iris2.docker.localhost`)"
+    hostname: iris2
+    init: true
+    networks:
+      iris-net:
+        ipv4_address: 10.0.0.12
+    ports:
+      - "9021:1972"
+      - "9022:52773"
+    environment:
+      - ISC_DATA_DIRECTORY=/ISC/iris.sys.d2
+      - ISC_CPF_MERGE_FILE=/ISC/mirrorBackup.conf
+    volumes:
+     - ./:/ISC
+    depends_on: 
+      - iris1
+
+  arbiter:
+    image: arbiter:myapp.1
+    command: ["-p 2188"]
+    networks:
+      iris-net:
+        ipv4_address: 10.0.0.13
+    hostname: arbiter
+    #ports:
+      #- "2188:2188"
+      # this setting is not needed as communication is happening within the container network; no host publishing needed.
